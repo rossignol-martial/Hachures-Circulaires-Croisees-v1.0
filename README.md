@@ -7,11 +7,9 @@ par [Martial Rossignol](http://www.martial-rossignol.fr) · Arras, France
 
 ## Aperçu
 
-![Exemple de hachures circulaires croisées](docs/preview.png)
-
 Hachures Circulaires Croisées est un outil web qui génère des compositions de **cercles concentriques superposés** dont la densité est modulée par la luminosité d'une image source. Il produit des fichiers SVG vectoriels prêts pour traceur plotter (AxiDraw, etc.) et des PNG haute résolution.
 
-**[→ Essayer en ligne](https://rossignol-martial.github.io/hachures-circulaires-croisees/)**
+**[→ Essayer en ligne](https://rossignol-martial.github.io/Hachures-Circulaires-Croisees-v1.0/)**
 
 ---
 
@@ -51,7 +49,7 @@ open index.html
 
 ## Workflow rapide
 
-1. **Glisser** une image JPG/PNG dans la zone de dépôt
+1. **Glisser** une image JPG/PNG dans la zone de dépôt, puis passer en mode plein écran
 2. **Recadrer** si nécessaire (bouton ⬚ dans la barre de zoom)
 3. Choisir le **nombre de calques** (2–9) et leur répartition
 4. Régler **pitch**, **seuils** et **contours**
