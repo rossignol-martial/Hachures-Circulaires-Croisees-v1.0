@@ -464,10 +464,13 @@ function buildLayerUI(){
 
     const body=document.createElement('div'); body.className='layer-body'+(i===0?' open':'');
 
-    // Mini map
+    // Mini map — dimensions adaptées au ratio W/H courant
+    const MM_W = 180;
+    const MM_H = Math.round(MM_W * H / W);
     const mlbl=document.createElement('div'); mlbl.className='mini-lbl'; mlbl.textContent='centre — cliquer / glisser';
     const mwrap=document.createElement('div'); mwrap.className='mini-map-wrap';
-    const mc=document.createElement('canvas'); mc.id=`mm${i}`; mc.width=180; mc.height=110;
+    mwrap.style.aspectRatio = `${MM_W}/${MM_H}`;
+    const mc=document.createElement('canvas'); mc.id=`mm${i}`; mc.width=MM_W; mc.height=MM_H;
     const mdot=document.createElement('div'); mdot.className='mini-dot'; mdot.id=`md${i}`;
     mdot.style.cssText=`background:${lyr.color};left:${lyr.cx*100}%;top:${lyr.cy*100}%`;
     mwrap.appendChild(mc); mwrap.appendChild(mdot);
@@ -519,15 +522,21 @@ function buildLayerUI(){
 function updateMiniMaps(){
   layers.forEach((_,i)=>{
     const mc=document.getElementById(`mm${i}`); if(!mc)return;
+    // Resize mini-map canvas to match current image ratio
+    const MM_W=180, MM_H=Math.round(MM_W*H/W);
+    if(mc.width!==MM_W||mc.height!==MM_H){ mc.width=MM_W; mc.height=MM_H; }
+    // Also update the wrap aspect-ratio
+    const mwrap=mc.parentElement;
+    if(mwrap) mwrap.style.aspectRatio=`${MM_W}/${MM_H}`;
     const ctx=mc.getContext('2d');
     if(sourceImageData){
       const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
       tmp.getContext('2d').putImageData(sourceImageData,0,0);
-      ctx.drawImage(tmp,0,0,mc.width,mc.height);
+      ctx.drawImage(tmp,0,0,MM_W,MM_H);
     } else {
-      const g=ctx.createRadialGradient(mc.width/2,mc.height/2,2,mc.width/2,mc.height/2,mc.width*.6);
+      const g=ctx.createRadialGradient(MM_W/2,MM_H/2,2,MM_W/2,MM_H/2,MM_W*.6);
       g.addColorStop(0,'#ddd'); g.addColorStop(1,'#555');
-      ctx.fillStyle=g; ctx.fillRect(0,0,mc.width,mc.height);
+      ctx.fillStyle=g; ctx.fillRect(0,0,MM_W,MM_H);
     }
   });
 }
@@ -867,29 +876,33 @@ const FRAME_C = '#000000';
 
 function buildSvg(svgLayers,bg,lw){
   const {x:rx,y:ry,w:rw,h:rh}=imgRect;
-  // SVG canvas = exact image rect size (no extra frame pixels)
-  const W_svg=rw, H_svg=rh;
+  // Express SVG in mm so Inkscape opens at correct physical size (96dpi = 1px = 0.264583mm)
+  const PX_TO_MM = 0.264583;
+  const W_mm = (rw * PX_TO_MM).toFixed(3);
+  const H_mm = (rh * PX_TO_MM).toFixed(3);
+  // Frame: 0.5pt = 0.176mm
+  const FRAME_MM = (0.5 * 0.3528).toFixed(4);
+  const f2 = parseFloat(FRAME_MM)/2;
 
   const groups=svgLayers.map(({lines,color,opacity},li)=>{
     const paths=lines.map(pts=>{
-      // Translate from full canvas coords to image-rect-local coords
-      let d=`M${(pts[0][0]-rx).toFixed(2)},${(pts[0][1]-ry).toFixed(2)}`;
+      // Coords in mm (viewBox is in mm too)
+      let d=`M${((pts[0][0]-rx)*PX_TO_MM).toFixed(3)},${((pts[0][1]-ry)*PX_TO_MM).toFixed(3)}`;
       for(let j=1;j<pts.length;j++)
-        d+=` L${(pts[j][0]-rx).toFixed(2)},${(pts[j][1]-ry).toFixed(2)}`;
-      return `  <path d="${d}" fill="none" stroke="${color}" stroke-width="${lw}" stroke-linecap="round"/>`;
+        d+=` L${((pts[j][0]-rx)*PX_TO_MM).toFixed(3)},${((pts[j][1]-ry)*PX_TO_MM).toFixed(3)}`;
+      return `  <path d="${d}" fill="none" stroke="${color}" stroke-width="${(lw*PX_TO_MM).toFixed(4)}" stroke-linecap="round"/>`;
     }).join('\n');
     return `<g id="calque${li+1}">\n${paths}\n</g>`;
   }).join('\n');
 
-  // Frame rect drawn exactly at the border (stroke centered = 0.25px inside/outside)
-  const f2 = FRAME_W/2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W_svg}" height="${H_svg}" viewBox="0 0 ${W_svg} ${H_svg}">
-<defs><clipPath id="clip"><rect width="${W_svg}" height="${H_svg}"/></clipPath></defs>
-<rect width="${W_svg}" height="${H_svg}" fill="${bg}"/>
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W_mm}mm" height="${H_mm}mm" viewBox="0 0 ${W_mm} ${H_mm}">
+<defs><clipPath id="clip"><rect width="${W_mm}" height="${H_mm}"/></clipPath></defs>
+<rect width="${W_mm}" height="${H_mm}" fill="${bg}"/>
 <g clip-path="url(#clip)">
 ${groups}
 </g>
-<rect x="${f2}" y="${f2}" width="${W_svg-FRAME_W}" height="${H_svg-FRAME_W}" fill="none" stroke="${FRAME_C}" stroke-width="${FRAME_W}"/>
+<rect x="${f2}" y="${f2}" width="${(parseFloat(W_mm)-parseFloat(FRAME_MM)).toFixed(3)}" height="${(parseFloat(H_mm)-parseFloat(FRAME_MM)).toFixed(3)}" fill="none" stroke="${FRAME_C}" stroke-width="${FRAME_MM}"/>
 </svg>`;
 }
 
@@ -940,7 +953,7 @@ ${groups}
         <option value="landscape">paysage</option>
       </select>
     </div>
-    <div class="mrow">
+    <div class="mrow" id="expDpiRow">
       <label>résolution</label>
       <select id="expDpi">
         <option value="72">72 dpi (écran)</option>
@@ -1055,13 +1068,19 @@ function getExpDims(){
 function updateExpPreview(){
   const d=getExpDims();
   const info=document.getElementById('expPreviewInfo');
+  const dpiRow=document.getElementById('expDpiRow');
   if(d.fmt==='image'){
-    info.textContent=`Taille finale : ${d.px} × ${d.py} px`;
+    // Image source: DPI not applicable for SVG, relevant for PNG
+    dpiRow.style.display='none';
+    info.textContent=`SVG : dimensions canvas en mm (vectoriel)\nPNG : ${d.px} × ${d.py} px`;
   } else {
+    // Paper: DPI only for PNG, SVG is always mm
+    dpiRow.style.display='flex';
+    const {pw,ph,marginMm,orient,dpi,px:TW,py:TH}=d;
     info.textContent=
-      `Papier : ${d.pw}×${d.ph} mm (${d.orient})\n`+
-      `Résolution : ${d.px}×${d.py} px @ ${d.dpi} dpi\n`+
-      `Dessin : ${d.imgW}×${d.imgH} px avec marge ${d.marginMm} mm`;
+      `Papier : ${pw} × ${ph} mm — ${orient}\n`+
+      `SVG : ${pw} × ${ph} mm (vectoriel — résolution non applicable)\n`+
+      `PNG : ${TW} × ${TH} px @ ${dpi} dpi`;
   }
 }
 
@@ -1116,30 +1135,50 @@ function doExport(type){
     const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download=name+'.png'; a.click();
 
   } else {
-    // SVG paper: regenerate paths scaled directly — no transform, clean coordinates
+    // SVG paper: coordinates in mm — Inkscape/Illustrator ouvre à la bonne taille physique
     if(!lastSvgData) return;
-    // Extract per-layer lines from lastSvgData is complex — re-render to get svgLayers
-    // We use the stored render data via a synchronous re-collect
+
+    // Paper dimensions in mm
+    const {pw, ph, marginMm} = d;
+    // Drawing area in mm
+    const drawWmm = pw - marginMm*2;
+    const drawHmm = ph - marginMm*2;
+    // Scale: canvas px → mm (fit image into drawing area, preserve ratio)
+    const scaleMm = Math.min(drawWmm/rw, drawHmm/rh);
+    // Image size in mm
+    const imgWmm = rw * scaleMm;
+    const imgHmm = rh * scaleMm;
+    // Offset in mm (center within drawing area)
+    const offXmm = marginMm + (drawWmm - imgWmm)/2;
+    const offYmm = marginMm + (drawHmm - imgHmm)/2;
+    // Stroke width in mm
+    const lwMm = (lw * scaleMm).toFixed(4);
+    // Frame stroke in mm (0.5pt = 0.176mm)
+    const frameMm = (0.5 * 0.3528).toFixed(4);
+
     const groups=(lastSvgLayers||[]).map(({lines,color},li)=>{
       const paths=lines.map(pts=>{
-        // Map canvas coords → paper coords
-        let d2=`M${((pts[0][0]-rx)*scale+offX).toFixed(2)},${((pts[0][1]-ry)*scale+offY).toFixed(2)}`;
+        // Map canvas coords (relative to imgRect) → mm
+        let d2=`M${((pts[0][0]-rx)*scaleMm+offXmm).toFixed(3)},${((pts[0][1]-ry)*scaleMm+offYmm).toFixed(3)}`;
         for(let j=1;j<pts.length;j++)
-          d2+=` L${((pts[j][0]-rx)*scale+offX).toFixed(2)},${((pts[j][1]-ry)*scale+offY).toFixed(2)}`;
-        return `  <path d="${d2}" fill="none" stroke="${color}" stroke-width="${lwScaled}" stroke-linecap="round"/>`;
+          d2+=` L${((pts[j][0]-rx)*scaleMm+offXmm).toFixed(3)},${((pts[j][1]-ry)*scaleMm+offYmm).toFixed(3)}`;
+        return `  <path d="${d2}" fill="none" stroke="${color}" stroke-width="${lwMm}" stroke-linecap="round"/>`;
       }).join('\n');
       return `<g id="calque${li+1}">\n${paths}\n</g>`;
     }).join('\n');
 
-    const f2=FRAME_W/2;
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${TW}" height="${TH}" viewBox="0 0 ${TW} ${TH}">
-<defs><clipPath id="drawarea"><rect x="${offX}" y="${offY}" width="${imgW}" height="${imgH}"/></clipPath></defs>
-<rect width="${TW}" height="${TH}" fill="${bgPaper}"/>
-<rect x="${offX}" y="${offY}" width="${imgW}" height="${imgH}" fill="${bgColor}"/>
-<g clip-path="url(#drawarea)">
+    const f2 = parseFloat(frameMm)/2;
+    const svg=`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="${pw}mm" height="${ph}mm"
+     viewBox="0 0 ${pw} ${ph}">
+  <defs><clipPath id="drawarea"><rect x="${offXmm.toFixed(3)}" y="${offYmm.toFixed(3)}" width="${imgWmm.toFixed(3)}" height="${imgHmm.toFixed(3)}"/></clipPath></defs>
+  <rect width="${pw}" height="${ph}" fill="#ffffff"/>
+  <rect x="${offXmm.toFixed(3)}" y="${offYmm.toFixed(3)}" width="${imgWmm.toFixed(3)}" height="${imgHmm.toFixed(3)}" fill="${bgColor}"/>
+  <g clip-path="url(#drawarea)">
 ${groups}
-</g>
-<rect x="${offX+f2}" y="${offY+f2}" width="${imgW-FRAME_W}" height="${imgH-FRAME_W}" fill="none" stroke="${FRAME_C}" stroke-width="${FRAME_W}"/>
+  </g>
+  <rect x="${(offXmm+f2).toFixed(3)}" y="${(offYmm+f2).toFixed(3)}" width="${(imgWmm-parseFloat(frameMm)).toFixed(3)}" height="${(imgHmm-parseFloat(frameMm)).toFixed(3)}" fill="none" stroke="${FRAME_C}" stroke-width="${frameMm}"/>
 </svg>`;
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.download=name+'.svg'; a.click();
   }
