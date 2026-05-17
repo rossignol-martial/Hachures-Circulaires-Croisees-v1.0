@@ -24,7 +24,7 @@ html,body{height:100%;overflow:hidden;}
 body{font-family:'Georgia',serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;}
 
 /* HEADER */
-header{height:var(--header);min-height:var(--header);display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:.5px solid var(--border);background:var(--surface);flex-shrink:0;gap:12px;}
+header{height:var(--header);min-height:var(--header);display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:.5px solid var(--border);background:var(--surface);flex-shrink:0;gap:12px;position:relative;overflow:hidden;}
 .hdr-title{display:flex;flex-direction:column;line-height:1.25;}
 .hdr-title h1{font-size:15px;font-weight:normal;letter-spacing:.06em;}
 .hdr-title p{font-size:10px;color:var(--text-muted);font-family:'Courier New',monospace;}
@@ -167,6 +167,13 @@ button.icon{padding:5px 9px;font-size:13px;line-height:1;}
     <button id="btnPresets" title="Presets">presets</button>
     <button class="icon" id="btnFS" title="Plein écran">⛶</button>
   </div>
+  <div id="progressBar" style="
+    position:absolute; bottom:0; left:0; width:0%; height:5px;
+    background: linear-gradient(90deg,#3a8fe8,#8e44ad,#c0392b);
+    transition: width 0.15s ease;
+    border-radius:0 3px 3px 0;
+    opacity:0; pointer-events:none;
+  "></div>
 </header>
 
 <div class="app" id="appRoot">
@@ -190,7 +197,7 @@ button.icon{padding:5px 9px;font-size:13px;line-height:1;}
 
     <div class="panel">
       <h3>Hachures</h3>
-      <div class="ctrl"><label>pitch</label><button class="step" data-for="pitch" data-dir="-1">−</button><input type="range" id="pitch" min="0.5" max="30" value="2" step="0.5"><button class="step" data-for="pitch" data-dir="1">+</button><span class="val" id="pitchVal">2</span></div>
+      <div class="ctrl"><label>pitch</label><button class="step" data-for="pitch" data-dir="-1">−</button><input type="range" id="pitch" min="0.5" max="30" value="1" step="0.5"><button class="step" data-for="pitch" data-dir="1">+</button><span class="val" id="pitchVal">1</span></div>
       <div class="ctrl"><label>gamma</label><button class="step" data-for="imgGamma" data-dir="-1">−</button><input type="range" id="imgGamma" min="0.2" max="3" value="1" step="0.1"><button class="step" data-for="imgGamma" data-dir="1">+</button><span class="val" id="imgGammaVal">1.0</span></div>
       <div class="ctrl"><label>CLAHE</label><button class="step" data-for="clahe" data-dir="-1">−</button><input type="range" id="clahe" min="0" max="100" value="0" step="5"><button class="step" data-for="clahe" data-dir="1">+</button><span class="val" id="claheVal">0%</span></div>
       <div class="ctrl"><label>flou</label><button class="step" data-for="blur" data-dir="-1">−</button><input type="range" id="blur" min="0" max="12" value="2" step="1"><button class="step" data-for="blur" data-dir="1">+</button><span class="val" id="blurVal">2</span></div>
@@ -217,27 +224,14 @@ button.icon{padding:5px 9px;font-size:13px;line-height:1;}
     </div>
 
     <div class="panel">
-      <h3>Fond</h3>
-      <div class="ctrl"><label>couleur</label><input type="color" id="bgColor" value="#f0ece4"></div>
-      <div class="sw-row">
-        <div class="sw" style="background:#f0ece4" data-val="#f0ece4" data-target="bgColor"></div>
-        <div class="sw" style="background:#ffffff" data-val="#ffffff" data-target="bgColor"></div>
-        <div class="sw" style="background:#1a1a1a" data-val="#1a1a1a" data-target="bgColor"></div>
-        <div class="sw" style="background:#0a1628" data-val="#0a1628" data-target="bgColor"></div>
-        <div class="sw" style="background:#f0e6d3" data-val="#f0e6d3" data-target="bgColor"></div>
-        <div class="sw" style="background:#e8f0e8" data-val="#e8f0e8" data-target="bgColor"></div>
-      </div>
-    </div>
-
-    <div class="panel">
       <h3>Distribution des centres</h3>
       <div class="ctrl"><label>rayon</label><button class="step" data-for="distR" data-dir="-1">−</button><input type="range" id="distR" min="1" max="100" value="30" step="1"><button class="step" data-for="distR" data-dir="1">+</button><span class="val" id="distRVal">30%</span></div>
       <div class="ctrl"><label>rotation</label><button class="step" data-for="distA" data-dir="-1">−</button><input type="range" id="distA" min="0" max="359" value="0" step="1"><button class="step" data-for="distA" data-dir="1">+</button><span class="val" id="distAVal">0°</span></div>
     </div>
 
-    <!-- fixed frame: 0.5px black, no UI -->
+    <!-- fond fixe blanc — plus de panel fond -->
+    <input type="hidden" id="bgColor" value="#ffffff">
     <input type="hidden" id="frameColor" value="#000000">
-    <input type="hidden" id="frameW" value="0.5">
 
   </div><!-- /sidebar -->
 
@@ -287,10 +281,13 @@ button.icon{padding:5px 9px;font-size:13px;line-height:1;}
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────────
 let W = 1360, H = 960;
+let cropMode = false; // déclaré tôt pour les listeners du premier bloc
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let sourceImageData = null;
 let sourceImageFull = null; // full original image (pre-crop) for crop reset
+let sourceImgElement = null; // original Image element at native resolution for HD export
+let sourceImgNativeW = 0, sourceImgNativeH = 0;
 let lastSvgData = null;
 let lastSvgLayers = [];
 let imgRect = {x:0, y:0, w:W, h:H};
@@ -338,8 +335,7 @@ function applyTransform(){
   tfEl.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
   document.getElementById('zoomLabel').textContent = Math.round(zoom*100)+'%';
   if(typeof cropMode!=='undefined' && cropMode) drawCropOverlay();
-}
-function fitCanvas(){
+}function fitCanvas(){
   const vw = viewport.clientWidth || 600, vh = viewport.clientHeight || 400;
   zoom = Math.min(vw/W, vh/H) * 0.90;
   panX = (vw - W*zoom)/2;
@@ -365,7 +361,7 @@ viewport.addEventListener('wheel', e=>{
 // Mouse pan
 let panning=false, pStart={x:0,y:0}, pOrig={x:0,y:0};
 viewport.addEventListener('mousedown', e=>{
-  if(cropMode) return; // crop handles its own drag
+  if(cropMode) return;
   if(e.target.closest('button')||e.target.closest('.zoom-bar')||e.target.closest('.export-bar'))return;
   panning=true; pStart={x:e.clientX,y:e.clientY}; pOrig={x:panX,y:panY};
   viewport.style.cursor='grabbing';
@@ -582,7 +578,7 @@ function updateLabels(){
 }
 updateLabels();
 
-['pitch','blur','imgGamma','clahe','edgeStr','edgeGamma','edgeDir','jitter','lvl1','lvl2','lvl3','lvl4','lineW','invert','bgColor'].forEach(id=>{
+['pitch','blur','imgGamma','clahe','edgeStr','edgeGamma','edgeDir','jitter','lvl1','lvl2','lvl3','lvl4','lineW','invert'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{ updateLabels(); render(); });
 });
 // Distribution sliders → recompute centers on circle
@@ -613,6 +609,9 @@ function loadFile(file){
   reader.onload=ev=>{
     const img=new Image();
     img.onload=()=>{
+      sourceImgElement = img;
+      sourceImgNativeW = img.naturalWidth;
+      sourceImgNativeH = img.naturalHeight;
       // Resize canvas to image ratio, capped at 1360×960
       const maxW=1360, maxH=960;
       const ratio=img.width/img.height;
@@ -828,7 +827,23 @@ function circularHatches(gray,pitch,l1,l2,l3,l4,cx,cy,jitter,angMap,edgeDirStr){
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────────
-function render(){
+// ── Progress bar ───────────────────────────────────────────────────────────────
+const progressBar = document.getElementById('progressBar');
+let renderInProgress = false;
+
+function setProgress(ratio){
+  progressBar.style.width = (ratio*100)+'%';
+  progressBar.style.opacity = ratio>0&&ratio<1 ? '1' : ratio===1 ? '0' : '0';
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function render(){
+  if(renderInProgress) return; // debounce: skip if already running
+  renderInProgress=true;
+  setProgress(0.05);
+  await sleep(0); // yield to browser to show bar
+
   const pitch    =+document.getElementById('pitch').value;
   const blur     =+document.getElementById('blur').value;
   const imgGamma =+document.getElementById('imgGamma').value;
@@ -839,7 +854,6 @@ function render(){
   const l4       =+document.getElementById('lvl4').value;
   const lineW    =+document.getElementById('lineW').value;
   const inv      = document.getElementById('invert').checked;
-  const bgColor  = document.getElementById('bgColor').value;
   const jitter   =+document.getElementById('jitter').value;
   const edgeT    =+document.getElementById('edgeStr').value/100;
   const edgeGamma=+document.getElementById('edgeGamma').value;
@@ -847,13 +861,17 @@ function render(){
 
   const gray=getGrayMap(blur,inv,imgGamma,claheStr);
   const {map,ang}=combinedMap(gray,edgeT,edgeGamma,edgeMode);
-  hCtx.fillStyle=bgColor; hCtx.fillRect(0,0,W,H);
+  setProgress(0.12); await sleep(0);
+
+  hCtx.fillStyle='#ffffff'; hCtx.fillRect(0,0,W,H);
   hCtx.lineCap='round'; hCtx.lineJoin='round'; hCtx.lineWidth=lineW;
 
+  const visibleLayers=layers.slice(0,numLayers).filter(l=>l.visible);
+  const total=visibleLayers.length;
   const svgLayers=[];
-  for(let i=0;i<numLayers;i++){
-    const lyr=layers[i];
-    if(!lyr.visible) continue;
+
+  for(let i=0;i<total;i++){
+    const lyr=visibleLayers[i];
     const cx=Math.round(lyr.cx*W), cy=Math.round(lyr.cy*H);
     const lines=circularHatches(map,pitch,l1,l2,l3,l4,cx,cy,jitter,ang,edgeDirStr);
     hCtx.globalAlpha=1; hCtx.strokeStyle=lyr.color;
@@ -863,10 +881,21 @@ function render(){
       hCtx.stroke();
     }
     svgLayers.push({lines,color:lyr.color,opacity:1});
+    // Progress: 12% → 95% across layers
+    setProgress(0.12 + (i+1)/total * 0.83);
+    await sleep(0); // yield to browser between layers
   }
+
   hCtx.globalAlpha=1;
   lastSvgLayers=svgLayers;
-  lastSvgData=buildSvg(svgLayers,bgColor,lineW);
+  lastSvgData=buildSvg(svgLayers,lineW);
+
+  // Complete
+  setProgress(1);
+  await sleep(400);
+  progressBar.style.opacity='0';
+  progressBar.style.width='0%';
+  renderInProgress=false;
 }
 
 // ── SVG export with frame ──────────────────────────────────────────────────────
@@ -874,7 +903,7 @@ function render(){
 const FRAME_W = 0.5;
 const FRAME_C = '#000000';
 
-function buildSvg(svgLayers,bg,lw){
+function buildSvg(svgLayers,lw){
   const {x:rx,y:ry,w:rw,h:rh}=imgRect;
   // Express SVG in mm so Inkscape opens at correct physical size (96dpi = 1px = 0.264583mm)
   const PX_TO_MM = 0.264583;
@@ -898,7 +927,7 @@ function buildSvg(svgLayers,bg,lw){
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${W_mm}mm" height="${H_mm}mm" viewBox="0 0 ${W_mm} ${H_mm}">
 <defs><clipPath id="clip"><rect width="${W_mm}" height="${H_mm}"/></clipPath></defs>
-<rect width="${W_mm}" height="${H_mm}" fill="${bg}"/>
+<rect width="${W_mm}" height="${H_mm}" fill="#ffffff"/>
 <g clip-path="url(#clip)">
 ${groups}
 </g>
@@ -918,7 +947,12 @@ ${groups}
       <input type="text" id="presetName" placeholder="Nom du preset…" style="flex:1">
       <button class="primary" id="btnPresetSave" style="flex-shrink:0">Sauver</button>
     </div>
-    <div class="modal-btns" style="margin-top:4px">
+    <div class="modal-btns" style="margin-top:4px;gap:6px">
+      <button id="btnPresetsExport">↓ exporter JSON</button>
+      <label id="btnPresetsImport" style="cursor:pointer;padding:5px 12px;border-radius:6px;border:.5px solid var(--border-mid);font-size:12px;font-family:'Courier New',monospace;background:var(--surface2);">
+        ↑ importer JSON
+        <input type="file" id="presetsFileInput" accept=".json" style="display:none">
+      </label>
       <button id="presetsClose">fermer</button>
     </div>
   </div>
@@ -967,6 +1001,11 @@ ${groups}
       <input type="range" id="expMargin" min="0" max="50" value="20" step="1">
       <span class="val" id="expMarginVal">20 mm</span>
     </div>
+    <div class="mrow" id="expImgLayerRow" style="display:none">
+      <label style="flex:1">image dans SVG</label>
+      <input type="checkbox" id="expImgLayer" style="width:15px;height:15px;cursor:pointer;accent-color:var(--text);">
+      <span style="font-size:10px;font-family:'Courier New',monospace;color:var(--text-faint);margin-left:6px">calque base64</span>
+    </div>
     <div class="modal-sep"></div>
     <div id="expPreviewInfo" style="font-size:10px;font-family:'Courier New',monospace;color:var(--text-faint);line-height:1.6;white-space:pre;"></div>
     <div class="modal-btns">
@@ -986,7 +1025,6 @@ function collectParams(){
   const p = {};
   SLIDER_IDS.forEach(id=>{ const el=document.getElementById(id); if(el) p[id]=el.value; });
   p.invert    = document.getElementById('invert').checked;
-  p.bgColor   = document.getElementById('bgColor').value;
   p.edgeMode  = edgeMode;
   p.numLayers = numLayers;
   p.layers    = layers.map(l=>({cx:l.cx,cy:l.cy,color:l.color,visible:l.visible}));
@@ -996,7 +1034,6 @@ function collectParams(){
 function applyParams(p){
   SLIDER_IDS.forEach(id=>{ const el=document.getElementById(id); if(el&&p[id]!==undefined) el.value=p[id]; });
   if(p.invert!==undefined) document.getElementById('invert').checked=p.invert;
-  if(p.bgColor) document.getElementById('bgColor').value=p.bgColor;
   if(p.edgeMode){ edgeMode=p.edgeMode; document.querySelectorAll('.mode-btn').forEach(b=>{ b.classList.toggle('active',b.dataset.mode===edgeMode); }); }
   if(p.numLayers){
     numLayers=+p.numLayers;
@@ -1013,6 +1050,8 @@ document.getElementById('renderBtn').addEventListener('click',render);
 
 // Single export button opens modal
 function openExportModal(){
+  const fmt=document.getElementById('expFormat').value;
+  document.getElementById('expImgLayerRow').style.display=(fmt!=='image'&&sourceImgElement)?'flex':'none';
   updateExpPreview();
   document.getElementById('exportModal').classList.remove('hidden');
 }
@@ -1033,12 +1072,9 @@ function getExpDims(){
   const marginMm = +document.getElementById('expMargin').value;
   const orient = document.getElementById('expOrient').value;
   const {x:rx,y:ry,w:rw,h:rh}=imgRect;
-  const fw=+document.getElementById('frameW').value; // canvas frame px
 
   if(fmt==='image'){
-    // pixel-exact: include existing canvas frame
-    const tw=rw+fw*2, th=rh+fw*2;
-    return {px:tw, py:th, marginPx:0, fmt:'image', dpi};
+    return {px:rw, py:rh, marginPx:0, fmt:'image', dpi};
   }
 
   let [pw,ph]=PAPER[fmt]||PAPER.A4;
@@ -1092,6 +1128,7 @@ document.getElementById('expMargin').addEventListener('input',()=>{
 document.getElementById('expFormat').addEventListener('change',()=>{
   const fmt=document.getElementById('expFormat').value;
   document.getElementById('expOrientRow').style.display=(fmt==='image'||fmt==='square')?'none':'flex';
+  document.getElementById('expImgLayerRow').style.display=(fmt!=='image'&&sourceImgElement)?'flex':'none';
   updateExpPreview();
 });
 
@@ -1099,7 +1136,6 @@ function doExport(type){
   const name=document.getElementById('expName').value.trim()||'hachures';
   const d=getExpDims();
   const {x:rx,y:ry,w:rw,h:rh}=imgRect;
-  const bgColor=document.getElementById('bgColor').value;
   const lw=+document.getElementById('lineW').value;
 
   if(d.fmt==='image'){
@@ -1119,16 +1155,13 @@ function doExport(type){
 
   // Paper-sized export
   const {px:TW, py:TH, imgW, imgH, offX, offY, scale} = d;
-  const bgPaper='#ffffff';
   const lwScaled=(lw*scale).toFixed(3);
 
   if(type==='png'){
     const c=document.createElement('canvas'); c.width=TW; c.height=TH;
     const ctx=c.getContext('2d');
-    ctx.fillStyle=bgPaper; ctx.fillRect(0,0,TW,TH);
-    ctx.fillStyle=bgColor; ctx.fillRect(offX,offY,imgW,imgH);
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,TW,TH);
     ctx.drawImage(hatchCanvas,rx,ry,rw,rh,offX,offY,imgW,imgH);
-    // 0.5px black frame scaled
     const fwS=Math.max(0.5,FRAME_W*scale);
     ctx.strokeStyle=FRAME_C; ctx.lineWidth=fwS;
     ctx.strokeRect(offX+fwS/2,offY+fwS/2,imgW-fwS,imgH-fwS);
@@ -1158,7 +1191,6 @@ function doExport(type){
 
     const groups=(lastSvgLayers||[]).map(({lines,color},li)=>{
       const paths=lines.map(pts=>{
-        // Map canvas coords (relative to imgRect) → mm
         let d2=`M${((pts[0][0]-rx)*scaleMm+offXmm).toFixed(3)},${((pts[0][1]-ry)*scaleMm+offYmm).toFixed(3)}`;
         for(let j=1;j<pts.length;j++)
           d2+=` L${((pts[j][0]-rx)*scaleMm+offXmm).toFixed(3)},${((pts[j][1]-ry)*scaleMm+offYmm).toFixed(3)}`;
@@ -1168,17 +1200,43 @@ function doExport(type){
     }).join('\n');
 
     const f2 = parseFloat(frameMm)/2;
+
+    // Option : calque image base64 pleine résolution (respecte le recadrage)
+    const includeImg = document.getElementById('expImgLayer')?.checked && sourceImageFull;
+    let imgLayer = '';
+    if(includeImg){
+      // sourceImageFull contient l'image après recadrage (W×H canvas)
+      // On l'encode via un canvas temporaire à sa taille native canvas
+      const tmpC=document.createElement('canvas');
+      tmpC.width=W; tmpC.height=H;
+      tmpC.getContext('2d').putImageData(sourceImageFull,0,0);
+      const b64=tmpC.toDataURL('image/jpeg',0.92);
+      imgLayer=`  <g id="image-source" opacity="1">
+    <image href="${b64}"
+           x="${offXmm.toFixed(3)}" y="${offYmm.toFixed(3)}"
+           width="${imgWmm.toFixed(3)}" height="${imgHmm.toFixed(3)}"
+           preserveAspectRatio="xMidYMid meet"
+           clip-path="url(#drawarea)"/>
+  </g>`;
+    }
+
+    // Zone de clip = intérieur exact du cadre noir (bord intérieur du trait)
+    const clipX=(offXmm+f2).toFixed(3);
+    const clipY=(offYmm+f2).toFixed(3);
+    const clipW=(imgWmm-parseFloat(frameMm)).toFixed(3);
+    const clipH=(imgHmm-parseFloat(frameMm)).toFixed(3);
+
     const svg=`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg"
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      width="${pw}mm" height="${ph}mm"
      viewBox="0 0 ${pw} ${ph}">
-  <defs><clipPath id="drawarea"><rect x="${offXmm.toFixed(3)}" y="${offYmm.toFixed(3)}" width="${imgWmm.toFixed(3)}" height="${imgHmm.toFixed(3)}"/></clipPath></defs>
+  <defs><clipPath id="drawarea"><rect x="${clipX}" y="${clipY}" width="${clipW}" height="${clipH}"/></clipPath></defs>
   <rect width="${pw}" height="${ph}" fill="#ffffff"/>
-  <rect x="${offXmm.toFixed(3)}" y="${offYmm.toFixed(3)}" width="${imgWmm.toFixed(3)}" height="${imgHmm.toFixed(3)}" fill="${bgColor}"/>
+${imgLayer}
   <g clip-path="url(#drawarea)">
 ${groups}
   </g>
-  <rect x="${(offXmm+f2).toFixed(3)}" y="${(offYmm+f2).toFixed(3)}" width="${(imgWmm-parseFloat(frameMm)).toFixed(3)}" height="${(imgHmm-parseFloat(frameMm)).toFixed(3)}" fill="none" stroke="${FRAME_C}" stroke-width="${frameMm}"/>
+  <rect x="${(offXmm+f2).toFixed(3)}" y="${(offYmm+f2).toFixed(3)}" width="${clipW}" height="${clipH}" fill="none" stroke="${FRAME_C}" stroke-width="${frameMm}"/>
 </svg>`;
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.download=name+'.svg'; a.click();
   }
@@ -1226,9 +1284,8 @@ document.head.appendChild(bgSliderStyle);
 // ── Crop system ───────────────────────────────────────────────────────────────
 // cropRect: axis-aligned rect in canvas-pixel space (center + size)
 // cropAngle: rotation in radians
-let cropRect  = {x:0, y:0, w:W, h:H}; // top-left + size, unrotated
-let cropAngle = 0; // radians
-let cropMode  = false;
+let cropRect  = {x:0, y:0, w:W, h:H};
+let cropAngle = 0;
 
 const cropCanvas = document.getElementById('cropCanvas');
 const cropCtx    = cropCanvas.getContext('2d');
@@ -1566,6 +1623,17 @@ document.getElementById('btnRandom').addEventListener('click',()=>{
   // invert: rarely
   document.getElementById('invert').checked = Math.random()<0.15;
 
+  // distribution des centres: rayon et rotation aléatoires
+  // rayon: favoriser les valeurs moyennes (25-70%) — les extrêmes donnent des résultats moins lisibles
+  const r = rndChoice(10,20,25,30,35,40,50,60,70,80,91,100);
+  setSlider('distR', r);
+  // rotation: entièrement aléatoire sur 360°
+  const a = rnd(0, 359, 1);
+  setSlider('distA', a);
+  // Recalculer les centres et rebuilder l'UI
+  initLayers(numLayers, false);
+  buildLayerUI();
+
   updateLabels();
   render();
 });
@@ -1623,6 +1691,38 @@ document.getElementById('btnPresetSave').addEventListener('click',()=>{
 });
 
 // Enter key in preset name field
+// Export presets → JSON file
+document.getElementById('btnPresetsExport').addEventListener('click',()=>{
+  const p=loadAllPresets();
+  if(!Object.keys(p).length){ alert('Aucun preset à exporter.'); return; }
+  const blob=new Blob([JSON.stringify(p,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='hachures-presets.json'; a.click();
+});
+
+// Import presets ← JSON file
+document.getElementById('presetsFileInput').addEventListener('change',e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const imported=JSON.parse(ev.target.result);
+      if(typeof imported!=='object'||Array.isArray(imported)) throw new Error();
+      const existing=loadAllPresets();
+      // Merge: imported presets écrasent les existants si même nom
+      const merged={...existing,...imported};
+      saveAllPresets(merged);
+      renderPresetList();
+      const btn=document.getElementById('btnPresetsImport');
+      const orig=btn.textContent;
+      // Flash feedback
+      const span=btn.querySelector('span')||btn;
+    } catch(err){ alert('Fichier JSON invalide.'); }
+    e.target.value=''; // reset input
+  };
+  reader.readAsText(file);
+});
+
 document.getElementById('presetName').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('btnPresetSave').click(); });
 
 // ── Init ───────────────────────────────────────────────────────────────────────
