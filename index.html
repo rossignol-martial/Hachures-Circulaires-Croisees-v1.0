@@ -971,13 +971,12 @@ ${groups}
       <label>format papier</label>
       <select id="expFormat">
         <option value="image">image source (pixels)</option>
-        <option value="A5">A5  — 148×210 mm</option>
-        <option value="A4">A4  — 210×297 mm</option>
-        <option value="A3" selected>A3  — 297×420 mm</option>
-        <option value="A2">A2  — 420×594 mm</option>
+        <option value="A0">A0  — 841×1189 mm</option>
         <option value="A1">A1  — 594×841 mm</option>
-        <option value="Letter">Letter — 216×279 mm</option>
-        <option value="square">Carré  — 210×210 mm</option>
+        <option value="A2">A2  — 420×594 mm</option>
+        <option value="A3" selected>A3  — 297×420 mm</option>
+        <option value="A4">A4  — 210×297 mm</option>
+        <option value="A5">A5  — 148×210 mm</option>
       </select>
     </div>
     <div class="mrow" id="expOrientRow">
@@ -1062,8 +1061,7 @@ document.getElementById('expDoPng').addEventListener('click',()=>{ doExport('png
 
 // Paper sizes in mm [w, h]
 const PAPER = {
-  A5:[148,210], A4:[210,297], A3:[297,420], A2:[420,594], A1:[594,841],
-  Letter:[216,279], square:[210,210]
+  A0:[841,1189], A1:[594,841], A2:[420,594], A3:[297,420], A4:[210,297], A5:[148,210]
 };
 
 function getExpDims(){
@@ -1078,7 +1076,7 @@ function getExpDims(){
   }
 
   let [pw,ph]=PAPER[fmt]||PAPER.A4;
-  if(orient==='landscape'&&fmt!=='square')[pw,ph]=[ph,pw];
+  if(orient==='landscape')[pw,ph]=[ph,pw];
 
   const PX_PER_MM = dpi/25.4;
   const totalPxW = Math.round(pw*PX_PER_MM);
