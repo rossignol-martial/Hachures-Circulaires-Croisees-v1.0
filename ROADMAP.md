@@ -55,4 +55,3 @@ Produire une version anglaise complète du manuel :
 
 ---
 
-*Les contributions et retours sont les bienvenus via les [Issues GitHub](https://github.com/rossignol-martial/hachures-circulaires-croisees/issues).*
